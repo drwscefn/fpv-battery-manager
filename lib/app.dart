@@ -5,6 +5,9 @@ import 'core/theme/app_theme.dart';
 import 'features/battery_list/battery_list_screen.dart';
 import 'features/add_battery/add_battery_screen.dart';
 import 'features/battery_detail/battery_detail_screen.dart';
+import 'features/log_charge/capture_screen.dart';
+import 'features/log_charge/confirm_screen.dart';
+import 'features/log_charge/save_screen.dart';
 
 // Screen imports — these files don't exist yet, so use placeholder widgets
 // They will be filled in by later tasks. Use a simple scaffold as placeholder.
@@ -36,17 +39,17 @@ final _router = GoRouter(
     GoRoute(
       path: '/battery/:id/log/capture',
       builder: (_, state) =>
-          _PlaceholderScreen('CAPTURE ${state.pathParameters['id']}'),
+          CaptureScreen(batteryId: state.pathParameters['id']!),
     ),
     GoRoute(
       path: '/battery/:id/log/confirm',
       builder: (_, state) =>
-          _PlaceholderScreen('CONFIRM ${state.pathParameters['id']}'),
+          ConfirmScreen(batteryId: state.pathParameters['id']!),
     ),
     GoRoute(
       path: '/battery/:id/log/save',
       builder: (_, state) =>
-          _PlaceholderScreen('SAVE ${state.pathParameters['id']}'),
+          SaveScreen(batteryId: state.pathParameters['id']!),
     ),
     GoRoute(
       path: '/battery/:id/print',
