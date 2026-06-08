@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 import 'core/theme/app_theme.dart';
+import 'features/battery_list/battery_list_screen.dart';
 
 // Screen imports — these files don't exist yet, so use placeholder widgets
 // They will be filled in by later tasks. Use a simple scaffold as placeholder.
@@ -19,7 +20,7 @@ final _router = GoRouter(
   routes: [
     GoRoute(
       path: '/',
-      builder: (_, __) => const _PlaceholderScreen('BATTERY LIST'),
+      builder: (_, __) => const BatteryListScreen(),
     ),
     GoRoute(
       path: '/add',
