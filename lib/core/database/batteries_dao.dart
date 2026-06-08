@@ -1,6 +1,5 @@
 import 'package:drift/drift.dart';
 import 'database.dart';
-import 'tables.dart';
 
 class BatteriesDao {
   final AppDatabase _db;

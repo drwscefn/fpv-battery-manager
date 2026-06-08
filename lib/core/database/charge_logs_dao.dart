@@ -2,7 +2,6 @@
 import 'dart:convert';
 import 'package:drift/drift.dart';
 import 'database.dart';
-import 'tables.dart';
 
 class ChargeLogsDao {
   final AppDatabase _db;
