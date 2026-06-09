@@ -1,6 +1,7 @@
 // lib/features/battery_list/qr_scan_screen.dart
 import 'dart:async';
 import 'package:camera/camera.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -72,25 +73,24 @@ class _QrScanScreenState extends ConsumerState<QrScanScreen> {
     final camera = _controller?.description;
     if (camera == null) return null;
 
-    final rotation = InputImageRotationValue.fromRawValue(
-            camera.sensorOrientation) ??
-        InputImageRotation.rotation0deg;
+    final rotation =
+        InputImageRotationValue.fromRawValue(camera.sensorOrientation) ??
+            InputImageRotation.rotation0deg;
 
-    if (image.format.group != ImageFormatGroup.yuv420 &&
-        image.format.group != ImageFormatGroup.bgra8888) {
-      return null;
+    // Concatenate all plane bytes (required for correct YUV data)
+    final WriteBuffer allBytes = WriteBuffer();
+    for (final plane in image.planes) {
+      allBytes.putUint8List(plane.bytes);
     }
+    final bytes = allBytes.done().buffer.asUint8List();
 
-    final plane = image.planes.first;
     return InputImage.fromBytes(
-      bytes: plane.bytes,
+      bytes: bytes,
       metadata: InputImageMetadata(
         size: Size(image.width.toDouble(), image.height.toDouble()),
         rotation: rotation,
-        format: image.format.group == ImageFormatGroup.yuv420
-            ? InputImageFormat.yuv_420_888
-            : InputImageFormat.bgra8888,
-        bytesPerRow: plane.bytesPerRow,
+        format: InputImageFormat.nv21, // Android camera native format
+        bytesPerRow: image.planes[0].bytesPerRow,
       ),
     );
   }

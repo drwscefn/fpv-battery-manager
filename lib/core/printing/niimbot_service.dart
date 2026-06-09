@@ -5,8 +5,6 @@ import 'package:flutter_blue_plus/flutter_blue_plus.dart';
 import 'package:qr/qr.dart';
 
 class NiimbotService {
-  static const _serviceUuid = '0000ff00-0000-1000-8000-00805f9b34fb';
-
   BluetoothDevice? _device;
   BluetoothCharacteristic? _writeChar;
   BluetoothCharacteristic? _notifyChar;
@@ -43,19 +41,34 @@ class NiimbotService {
   // ── Connection ───────────────────────────────────────────────────────────────
 
   Future<void> connect() async {
+    // Ensure BLE is on
+    final adapterState = await FlutterBluePlus.adapterState
+        .where((s) => s == BluetoothAdapterState.on)
+        .first
+        .timeout(const Duration(seconds: 5), onTimeout: () => BluetoothAdapterState.off);
+    if (adapterState != BluetoothAdapterState.on) {
+      throw Exception('Bluetooth is off — please enable it');
+    }
+
     final completer = Completer<ScanResult?>();
     StreamSubscription? sub;
+
     sub = FlutterBluePlus.scanResults.listen((results) {
-      final match = results.firstOrNull;
-      if (match != null && !completer.isCompleted) {
-        completer.complete(match);
+      for (final r in results) {
+        final name = r.device.platformName.toLowerCase();
+        if ((name.contains('niimbot') ||
+                name.contains('d11') ||
+                name.contains('b21') ||
+                name.contains('b1_')) &&
+            !completer.isCompleted) {
+          completer.complete(r);
+          break;
+        }
       }
     });
 
-    await FlutterBluePlus.startScan(
-      withServices: [Guid(_serviceUuid)],
-      timeout: const Duration(seconds: 10),
-    );
+    await FlutterBluePlus.startScan(timeout: const Duration(seconds: 10));
+
     final result = await completer.future.timeout(
       const Duration(seconds: 11),
       onTimeout: () => null,
@@ -63,23 +76,31 @@ class NiimbotService {
     sub.cancel();
     await FlutterBluePlus.stopScan();
 
-    if (result == null) throw Exception('No Niimbot device found nearby');
+    if (result == null) {
+      throw Exception(
+          'No Niimbot device found — ensure printer is on and nearby');
+    }
 
     _device = result.device;
     await _device!.connect(timeout: const Duration(seconds: 10));
 
+    // Request larger MTU to avoid packet fragmentation
+    await _device!.requestMtu(512);
+
     final services = await _device!.discoverServices();
     for (final svc in services) {
-      if (svc.uuid.toString().toLowerCase().contains('ff00')) {
+      final svcId = svc.uuid.toString().toLowerCase();
+      if (svcId.contains('ff00')) {
         for (final char in svc.characteristics) {
-          final u = char.uuid.toString().toLowerCase();
-          if (u.contains('ff02')) _writeChar = char;
-          if (u.contains('ff01')) _notifyChar = char;
+          final charId = char.uuid.toString().toLowerCase();
+          if (charId.contains('ff02')) _writeChar = char;
+          if (charId.contains('ff01')) _notifyChar = char;
         }
       }
     }
-    if (_writeChar == null) throw Exception('Niimbot write characteristic not found');
-
+    if (_writeChar == null) {
+      throw Exception('Niimbot write characteristic not found');
+    }
     if (_notifyChar != null) {
       await _notifyChar!.setNotifyValue(true);
     }
@@ -94,18 +115,19 @@ class NiimbotService {
 
   // ── Low-level write ──────────────────────────────────────────────────────────
 
-  Future<void> _send(int cmd, List<int> data) async {
+  Future<void> _send(int cmd, List<int> data, {bool withoutResponse = false}) async {
     final packet = _buildPacket(cmd, data);
-    // BLE MTU is typically 20 bytes; chunk if needed
-    const mtu = 20;
+    const mtu = 512;
     for (int i = 0; i < packet.length; i += mtu) {
       final end = (i + mtu < packet.length) ? i + mtu : packet.length;
       await _writeChar!.write(
         packet.sublist(i, end),
-        withoutResponse: false,
+        withoutResponse: withoutResponse,
       );
     }
-    await Future.delayed(const Duration(milliseconds: 20));
+    if (!withoutResponse) {
+      await Future.delayed(const Duration(milliseconds: 20));
+    }
   }
 
   // ── Print flow ───────────────────────────────────────────────────────────────
@@ -147,7 +169,7 @@ class NiimbotService {
         row & 0xFF,
         0x00,
         ...rowData,
-      ]);
+      ], withoutResponse: true);
     }
 
     await _send(_cmdEndPage, [0x00]);

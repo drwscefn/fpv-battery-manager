@@ -1,9 +1,11 @@
 // lib/features/print_label/print_label_screen.dart
 import 'dart:io';
+import 'dart:typed_data';
 import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:gal/gal.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:share_plus/share_plus.dart';
@@ -22,16 +24,32 @@ class PrintLabelScreen extends ConsumerStatefulWidget {
 class _PrintLabelScreenState extends ConsumerState<PrintLabelScreen> {
   final _qrKey = GlobalKey();
 
-  Future<void> _shareQr(String batteryId) async {
+  Future<Uint8List?> _captureQrBytes() async {
     final boundary =
         _qrKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
-    if (boundary == null) return;
+    if (boundary == null) return null;
     final image = await boundary.toImage(pixelRatio: 3.0);
     final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-    if (byteData == null) return;
+    return byteData?.buffer.asUint8List();
+  }
+
+  Future<void> _saveToGallery(String batteryId) async {
+    final bytes = await _captureQrBytes();
+    if (bytes == null) return;
+    await Gal.putImageBytes(bytes, album: 'FPV Battery');
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('SAVED TO GALLERY')),
+      );
+    }
+  }
+
+  Future<void> _shareQr(String batteryId) async {
+    final bytes = await _captureQrBytes();
+    if (bytes == null) return;
     final dir = await getTemporaryDirectory();
     final file = File('${dir.path}/qr_$batteryId.png');
-    await file.writeAsBytes(byteData.buffer.asUint8List());
+    await file.writeAsBytes(bytes);
     await Share.shareXFiles([XFile(file.path)], text: 'FPV Battery QR Label');
   }
 
@@ -109,6 +127,7 @@ class _PrintLabelScreenState extends ConsumerState<PrintLabelScreen> {
                 _PrintButton(
                   batteryId: widget.batteryId,
                   batteryLabel: battery.label,
+                  onSave: () => _saveToGallery(widget.batteryId),
                   onShare: () => _shareQr(widget.batteryId),
                 ),
               ],
@@ -123,11 +142,13 @@ class _PrintLabelScreenState extends ConsumerState<PrintLabelScreen> {
 class _PrintButton extends ConsumerStatefulWidget {
   final String batteryId;
   final String batteryLabel;
-  final VoidCallback onShare;
+  final VoidCallback? onSave;
+  final VoidCallback? onShare;
   const _PrintButton({
     required this.batteryId,
     required this.batteryLabel,
-    required this.onShare,
+    this.onSave,
+    this.onShare,
   });
 
   @override
@@ -169,6 +190,12 @@ class _PrintButtonState extends ConsumerState<_PrintButton> {
           label: Text(_printing ? 'CONNECTING...' : 'PRINT VIA NIIMBOT'),
           onPressed: _printing ? null : _print,
         ),
+        const SizedBox(height: 8),
+        ElevatedButton.icon(
+          icon: const Icon(Icons.save_alt),
+          label: const Text('SAVE TO GALLERY'),
+          onPressed: () => widget.onSave?.call(),
+        ),
         if (_error != null) ...[
           const SizedBox(height: 8),
           Text(
@@ -177,9 +204,19 @@ class _PrintButtonState extends ConsumerState<_PrintButton> {
             textAlign: TextAlign.center,
           ),
           const SizedBox(height: 8),
-          TextButton(
-            onPressed: widget.onShare,
-            child: const Text('SHARE INSTEAD'),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              TextButton(
+                onPressed: () => widget.onSave?.call(),
+                child: const Text('SAVE TO GALLERY'),
+              ),
+              const SizedBox(width: 8),
+              TextButton(
+                onPressed: () => widget.onShare?.call(),
+                child: const Text('SHARE'),
+              ),
+            ],
           ),
         ],
       ],
