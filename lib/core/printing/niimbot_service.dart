@@ -89,19 +89,42 @@ class NiimbotService {
     await _device!.requestMtu(512);
 
     final services = await _device!.discoverServices();
+
+    // Pass 1: prefer known Niimbot UUIDs (ff02 = write, ff01 = notify)
     for (final svc in services) {
-      final svcId = svc.uuid.toString().toLowerCase();
-      if (svcId.contains('ff00')) {
+      for (final char in svc.characteristics) {
+        final id = char.uuid.toString().toLowerCase();
+        if (id.contains('ff02')) _writeChar = char;
+        if (id.contains('ff01')) _notifyChar = char;
+      }
+    }
+
+    // Pass 2: fallback — match by GATT property (works for any model/clone)
+    if (_writeChar == null) {
+      for (final svc in services) {
         for (final char in svc.characteristics) {
-          final charId = char.uuid.toString().toLowerCase();
-          if (charId.contains('ff02')) _writeChar = char;
-          if (charId.contains('ff01')) _notifyChar = char;
+          if (_writeChar == null &&
+              (char.properties.write || char.properties.writeWithoutResponse)) {
+            _writeChar = char;
+          }
+          if (_notifyChar == null &&
+              (char.properties.notify || char.properties.indicate)) {
+            _notifyChar = char;
+          }
         }
       }
     }
+
     if (_writeChar == null) {
-      throw Exception('Niimbot write characteristic not found');
+      // Build a diagnostic message listing what was actually found
+      final found = services
+          .expand((s) => s.characteristics)
+          .map((c) => c.uuid.toString())
+          .join(', ');
+      throw Exception(
+          'No writable BLE characteristic found. Characteristics: $found');
     }
+
     if (_notifyChar != null) {
       await _notifyChar!.setNotifyValue(true);
     }
