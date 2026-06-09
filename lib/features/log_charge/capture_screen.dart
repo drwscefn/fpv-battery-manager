@@ -3,6 +3,7 @@ import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import '../../core/database/database_provider.dart';
 import '../../core/theme/app_theme.dart';
 import 'log_charge_provider.dart';
 
@@ -22,6 +23,18 @@ class _CaptureScreenState extends ConsumerState<CaptureScreen> {
   void initState() {
     super.initState();
     _initCamera();
+    _initBattery();
+  }
+
+  Future<void> _initBattery() async {
+    final battery = await ref
+        .read(batteriesDaoProvider)
+        .getBatteryById(widget.batteryId);
+    if (battery != null) {
+      ref
+          .read(logChargeProvider(widget.batteryId).notifier)
+          .initForBattery(battery.cellCount);
+    }
   }
 
   Future<void> _initCamera() async {
@@ -48,6 +61,10 @@ class _CaptureScreenState extends ConsumerState<CaptureScreen> {
     if (mounted) context.push('/battery/${widget.batteryId}/log/confirm');
   }
 
+  void _enterManually() {
+    context.push('/battery/${widget.batteryId}/log/confirm');
+  }
+
   @override
   Widget build(BuildContext context) {
     if (_controller == null || !_controller!.value.isInitialized) {
@@ -61,6 +78,15 @@ class _CaptureScreenState extends ConsumerState<CaptureScreen> {
       appBar: AppBar(
         title: const Text('// AIM AT CHARGER SCREEN //'),
         backgroundColor: Colors.transparent,
+        actions: [
+          TextButton(
+            onPressed: _enterManually,
+            child: const Text(
+              'MANUAL',
+              style: TextStyle(color: AppColors.accent, letterSpacing: 2),
+            ),
+          ),
+        ],
       ),
       body: Stack(
         children: [

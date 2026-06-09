@@ -7,6 +7,7 @@ class LogChargeState {
   final String? imagePath;
   final List<double> voltages;
   final List<int> irValues;
+  final int cellCount;
   final String notes;
   final bool processing;
   final LogType logType;
@@ -15,6 +16,7 @@ class LogChargeState {
     this.imagePath,
     this.voltages = const [],
     this.irValues = const [],
+    this.cellCount = 0,
     this.notes = '',
     this.processing = false,
     this.logType = LogType.postCharge,
@@ -24,6 +26,7 @@ class LogChargeState {
     String? imagePath,
     List<double>? voltages,
     List<int>? irValues,
+    int? cellCount,
     String? notes,
     bool? processing,
     LogType? logType,
@@ -32,6 +35,7 @@ class LogChargeState {
         imagePath: imagePath ?? this.imagePath,
         voltages: voltages ?? this.voltages,
         irValues: irValues ?? this.irValues,
+        cellCount: cellCount ?? this.cellCount,
         notes: notes ?? this.notes,
         processing: processing ?? this.processing,
         logType: logType ?? this.logType,
@@ -44,24 +48,35 @@ class LogChargeNotifier extends FamilyNotifier<LogChargeState, String> {
   @override
   LogChargeState build(String arg) => const LogChargeState();
 
-  Future<void> setImagePath(String path) async {
-    state = state.copyWith(imagePath: path, processing: true);
-    final parsed = await _ocr.recognizeFromPath(path);
+  void initForBattery(int cellCount) {
     state = state.copyWith(
-      voltages: parsed.voltages,
-      irValues: parsed.irValues,
-      processing: false,
+      cellCount: cellCount,
+      voltages: List.filled(cellCount, 0.0),
+      irValues: List.filled(cellCount, 0),
     );
   }
 
+  Future<void> setImagePath(String path) async {
+    state = state.copyWith(imagePath: path, processing: true);
+    final parsed = await _ocr.recognizeFromPath(path);
+    final cc = state.cellCount;
+    final v = cc > 0
+        ? List.generate(cc, (i) => i < parsed.voltages.length ? parsed.voltages[i] : 0.0)
+        : parsed.voltages;
+    final ir = cc > 0
+        ? List.generate(cc, (i) => i < parsed.irValues.length ? parsed.irValues[i] : 0)
+        : parsed.irValues;
+    state = state.copyWith(voltages: v, irValues: ir, processing: false);
+  }
+
   void updateVoltage(int index, double value) {
-    final updated = [...state.voltages];
+    final updated = List<double>.from(state.voltages);
     if (index < updated.length) updated[index] = value;
     state = state.copyWith(voltages: updated);
   }
 
   void updateIr(int index, int value) {
-    final updated = [...state.irValues];
+    final updated = List<int>.from(state.irValues);
     if (index < updated.length) updated[index] = value;
     state = state.copyWith(irValues: updated);
   }
