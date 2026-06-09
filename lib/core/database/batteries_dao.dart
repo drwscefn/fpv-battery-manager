@@ -45,4 +45,20 @@ class BatteriesDao {
 
   Future<void> deleteBattery(String id) =>
       (_db.delete(_db.batteries)..where((t) => t.id.equals(id))).go();
+
+  Future<void> duplicateBattery({
+    required String sourceId,
+    required String newId,
+    required String newLabel,
+  }) async {
+    final source = await getBatteryById(sourceId);
+    if (source == null) return;
+    await insertBattery(
+      id: newId,
+      label: newLabel,
+      cellCount: source.cellCount,
+      capacityMah: source.capacityMah,
+      notes: source.notes,
+    );
+  }
 }

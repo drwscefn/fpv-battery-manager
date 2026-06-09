@@ -10,8 +10,18 @@ import 'package:path_provider/path_provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:share_plus/share_plus.dart';
 import '../../core/database/database_provider.dart';
-import '../../core/printing/niimbot_service.dart';
 import '../../core/theme/app_theme.dart';
+
+enum _LabelSize {
+  small('SMALL', 120.0, '~25×25mm'),
+  medium('MEDIUM', 200.0, '~50×50mm'),
+  large('LARGE', 280.0, '~75×75mm');
+
+  const _LabelSize(this.label, this.px, this.hint);
+  final String label;
+  final double px;
+  final String hint;
+}
 
 class PrintLabelScreen extends ConsumerStatefulWidget {
   final String batteryId;
@@ -23,6 +33,7 @@ class PrintLabelScreen extends ConsumerStatefulWidget {
 
 class _PrintLabelScreenState extends ConsumerState<PrintLabelScreen> {
   final _qrKey = GlobalKey();
+  _LabelSize _size = _LabelSize.medium;
 
   Future<Uint8List?> _captureQrBytes() async {
     final boundary =
@@ -33,7 +44,7 @@ class _PrintLabelScreenState extends ConsumerState<PrintLabelScreen> {
     return byteData?.buffer.asUint8List();
   }
 
-  Future<void> _saveToGallery(String batteryId) async {
+  Future<void> _saveToGallery() async {
     final bytes = await _captureQrBytes();
     if (bytes == null) return;
     await Gal.putImageBytes(bytes, album: 'FPV Battery');
@@ -44,13 +55,13 @@ class _PrintLabelScreenState extends ConsumerState<PrintLabelScreen> {
     }
   }
 
-  Future<void> _shareQr(String batteryId) async {
+  Future<void> _share() async {
     final bytes = await _captureQrBytes();
     if (bytes == null) return;
     final dir = await getTemporaryDirectory();
-    final file = File('${dir.path}/qr_$batteryId.png');
+    final file = File('${dir.path}/qr_${widget.batteryId}.png');
     await file.writeAsBytes(bytes);
-    await Share.shareXFiles([XFile(file.path)], text: 'FPV Battery QR Label');
+    await Share.shareXFiles([XFile(file.path)], text: 'LIPO MGR QR Label');
   }
 
   @override
@@ -58,7 +69,7 @@ class _PrintLabelScreenState extends ConsumerState<PrintLabelScreen> {
     final batteriesDao = ref.watch(batteriesDaoProvider);
 
     return Scaffold(
-      appBar: AppBar(title: const Text('// PRINT QR LABEL //')),
+      appBar: AppBar(title: const Text('// QR LABEL //')),
       body: FutureBuilder(
         future: batteriesDao.getBatteryById(widget.batteryId),
         builder: (context, snapshot) {
@@ -70,156 +81,147 @@ class _PrintLabelScreenState extends ConsumerState<PrintLabelScreen> {
             return const Center(child: Text('BATTERY NOT FOUND'));
           }
 
-          return Center(
+          return SingleChildScrollView(
+            padding: const EdgeInsets.all(24),
             child: Column(
-              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Container(
-                  decoration: BoxDecoration(
-                    border: Border.all(color: AppColors.accent, width: 2),
+                // Size selector
+                Text(
+                  'PRINT SIZE',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: AppColors.textSecondary,
+                        letterSpacing: 3,
+                      ),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: _LabelSize.values.map((s) {
+                    final selected = s == _size;
+                    return Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.only(right: 4),
+                        child: OutlinedButton(
+                          style: OutlinedButton.styleFrom(
+                            backgroundColor: selected
+                                ? AppColors.accent
+                                : Colors.transparent,
+                            foregroundColor: selected
+                                ? Colors.black
+                                : AppColors.textSecondary,
+                            side: BorderSide(
+                              color: selected
+                                  ? AppColors.accent
+                                  : AppColors.border,
+                            ),
+                            shape: const RoundedRectangleBorder(),
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                          ),
+                          onPressed: () => setState(() => _size = s),
+                          child: Text(s.label,
+                              style: const TextStyle(
+                                  fontSize: 11, letterSpacing: 1)),
+                        ),
+                      ),
+                    );
+                  }).toList(),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  'TELL YOUR PRINTER: ${_size.hint}',
+                  style: const TextStyle(
+                    color: AppColors.accent,
+                    fontSize: 11,
+                    letterSpacing: 2,
                   ),
-                  child: RepaintBoundary(
-                    key: _qrKey,
-                    child: Container(
-                      color: AppColors.background,
-                      padding: const EdgeInsets.all(16),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          QrImageView(
-                            data: battery.id,
-                            version: QrVersions.auto,
-                            size: 200,
-                            backgroundColor: AppColors.background,
-                            eyeStyle: const QrEyeStyle(
-                              eyeShape: QrEyeShape.square,
-                              color: AppColors.textPrimary,
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 24),
+
+                // QR preview
+                Center(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      border: Border.all(color: AppColors.accent, width: 2),
+                    ),
+                    child: RepaintBoundary(
+                      key: _qrKey,
+                      child: Container(
+                        color: Colors.white,
+                        padding: const EdgeInsets.all(12),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            QrImageView(
+                              data: battery.id,
+                              version: QrVersions.auto,
+                              size: _size.px,
+                              backgroundColor: Colors.white,
+                              eyeStyle: const QrEyeStyle(
+                                eyeShape: QrEyeShape.square,
+                                color: Colors.black,
+                              ),
+                              dataModuleStyle: const QrDataModuleStyle(
+                                dataModuleShape: QrDataModuleShape.square,
+                                color: Colors.black,
+                              ),
                             ),
-                            dataModuleStyle: const QrDataModuleStyle(
-                              dataModuleShape: QrDataModuleShape.square,
-                              color: AppColors.textPrimary,
+                            const SizedBox(height: 6),
+                            Text(
+                              battery.label.toUpperCase(),
+                              style: const TextStyle(
+                                color: Colors.black,
+                                fontSize: 11,
+                                letterSpacing: 2,
+                                fontWeight: FontWeight.bold,
+                              ),
                             ),
-                          ),
-                          const SizedBox(height: 12),
-                          Text(
-                            battery.label.toUpperCase(),
-                            style: Theme.of(context)
-                                .textTheme
-                                .titleMedium
-                                ?.copyWith(
-                                  color: AppColors.accent,
-                                  letterSpacing: 3,
-                                ),
-                          ),
-                          Text(
-                            '${battery.cellCount}S · ${battery.capacityMah}MAH',
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodySmall
-                                ?.copyWith(color: AppColors.textSecondary),
-                          ),
-                        ],
+                            Text(
+                              '${battery.cellCount}S · ${battery.capacityMah}MAH',
+                              style: const TextStyle(
+                                  color: Colors.black54, fontSize: 10),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
                 ),
-                const SizedBox(height: 32),
-                _PrintButton(
-                  batteryId: widget.batteryId,
-                  batteryLabel: battery.label,
-                  onSave: () => _saveToGallery(widget.batteryId),
-                  onShare: () => _shareQr(widget.batteryId),
+                const SizedBox(height: 24),
+
+                // Action buttons
+                ElevatedButton.icon(
+                  icon: const Icon(Icons.save_alt),
+                  label: const Text('SAVE TO GALLERY'),
+                  onPressed: _saveToGallery,
+                ),
+                const SizedBox(height: 8),
+                OutlinedButton.icon(
+                  icon: const Icon(Icons.share),
+                  label: const Text('SHARE'),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: AppColors.accent,
+                    side: const BorderSide(color: AppColors.border),
+                    shape: const RoundedRectangleBorder(),
+                  ),
+                  onPressed: _share,
+                ),
+                const SizedBox(height: 16),
+                Text(
+                  'SAVE TO GALLERY OR SHARE, THEN OPEN IN YOUR PRINTER APP.\nSET PRINT SIZE TO ${_size.hint} FOR BEST SCANNING.',
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 10,
+                    letterSpacing: 1,
+                    height: 1.6,
+                  ),
                 ),
               ],
             ),
           );
         },
       ),
-    );
-  }
-}
-
-class _PrintButton extends ConsumerStatefulWidget {
-  final String batteryId;
-  final String batteryLabel;
-  final VoidCallback? onSave;
-  final VoidCallback? onShare;
-  const _PrintButton({
-    required this.batteryId,
-    required this.batteryLabel,
-    this.onSave,
-    this.onShare,
-  });
-
-  @override
-  ConsumerState<_PrintButton> createState() => _PrintButtonState();
-}
-
-class _PrintButtonState extends ConsumerState<_PrintButton> {
-  final _niimbot = NiimbotService();
-  bool _printing = false;
-  String? _error;
-
-  Future<void> _print() async {
-    setState(() {
-      _printing = true;
-      _error = null;
-    });
-    try {
-      await _niimbot.connect();
-      await _niimbot.printLabel(widget.batteryId);
-      await _niimbot.disconnect();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('LABEL SENT TO PRINTER')),
-        );
-      }
-    } catch (e) {
-      setState(() => _error = e.toString());
-    } finally {
-      if (mounted) setState(() => _printing = false);
-    }
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      children: [
-        ElevatedButton.icon(
-          icon: const Icon(Icons.print),
-          label: Text(_printing ? 'CONNECTING...' : 'PRINT VIA NIIMBOT'),
-          onPressed: _printing ? null : _print,
-        ),
-        const SizedBox(height: 8),
-        ElevatedButton.icon(
-          icon: const Icon(Icons.save_alt),
-          label: const Text('SAVE TO GALLERY'),
-          onPressed: () => widget.onSave?.call(),
-        ),
-        if (_error != null) ...[
-          const SizedBox(height: 8),
-          Text(
-            'BLE ERROR: $_error',
-            style: const TextStyle(color: AppColors.warning, fontSize: 12),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 8),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              TextButton(
-                onPressed: () => widget.onSave?.call(),
-                child: const Text('SAVE TO GALLERY'),
-              ),
-              const SizedBox(width: 8),
-              TextButton(
-                onPressed: () => widget.onShare?.call(),
-                child: const Text('SHARE'),
-              ),
-            ],
-          ),
-        ],
-      ],
     );
   }
 }

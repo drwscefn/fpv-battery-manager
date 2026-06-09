@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:intl/intl.dart';
+import 'package:uuid/uuid.dart';
 import '../../core/database/database.dart';
 import '../../core/database/database_provider.dart';
 import '../../core/models/health_flag.dart';
@@ -77,6 +78,55 @@ class _BatteryDetailScreenState extends ConsumerState<BatteryDetailScreen> {
     notesCtrl.dispose();
   }
 
+  Future<void> _showDuplicateDialog(BuildContext context) async {
+    final battery =
+        await ref.read(batteriesDaoProvider).getBatteryById(widget.batteryId);
+    if (battery == null || !context.mounted) return;
+
+    final labelCtrl =
+        TextEditingController(text: '${battery.label} COPY');
+
+    await showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.surface,
+        shape: const RoundedRectangleBorder(),
+        title: const Text('// DUPLICATE BATTERY //'),
+        content: TextField(
+          controller: labelCtrl,
+          decoration: const InputDecoration(labelText: 'NEW LABEL'),
+          autofocus: true,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('CANCEL'),
+          ),
+          TextButton(
+            onPressed: () async {
+              final newId = const Uuid().v4();
+              final label = labelCtrl.text.trim().isEmpty
+                  ? '${battery.label} COPY'
+                  : labelCtrl.text.trim();
+              await ref.read(batteriesDaoProvider).duplicateBattery(
+                    sourceId: widget.batteryId,
+                    newId: newId,
+                    newLabel: label,
+                  );
+              if (ctx.mounted) {
+                Navigator.pop(ctx);
+                context.push('/battery/$newId');
+              }
+            },
+            child: const Text('DUPLICATE',
+                style: TextStyle(color: AppColors.accent)),
+          ),
+        ],
+      ),
+    );
+    labelCtrl.dispose();
+  }
+
   Future<void> _showDeleteDialog(BuildContext context) async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -120,19 +170,41 @@ class _BatteryDetailScreenState extends ConsumerState<BatteryDetailScreen> {
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.edit),
-            onPressed: () => _showEditDialog(context),
-            tooltip: 'Rename',
-          ),
-          IconButton(
-            icon: const Icon(Icons.delete_outline),
-            onPressed: () => _showDeleteDialog(context),
-            tooltip: 'Delete',
+            icon: const Icon(Icons.bar_chart),
+            tooltip: 'Charts',
+            onPressed: () =>
+                context.push('/battery/${widget.batteryId}/charts'),
           ),
           IconButton(
             icon: const Icon(Icons.qr_code),
+            tooltip: 'QR Label',
             onPressed: () =>
                 context.push('/battery/${widget.batteryId}/print'),
+          ),
+          PopupMenuButton<String>(
+            icon: const Icon(Icons.more_vert),
+            color: AppColors.surface,
+            shape: const RoundedRectangleBorder(),
+            onSelected: (v) {
+              if (v == 'rename') _showEditDialog(context);
+              if (v == 'duplicate') _showDuplicateDialog(context);
+              if (v == 'delete') _showDeleteDialog(context);
+            },
+            itemBuilder: (_) => const [
+              PopupMenuItem(
+                value: 'rename',
+                child: Text('RENAME'),
+              ),
+              PopupMenuItem(
+                value: 'duplicate',
+                child: Text('DUPLICATE'),
+              ),
+              PopupMenuItem(
+                value: 'delete',
+                child: Text('DELETE',
+                    style: TextStyle(color: AppColors.warning)),
+              ),
+            ],
           ),
         ],
       ),
