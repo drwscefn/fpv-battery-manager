@@ -10,18 +10,7 @@ import 'features/log_charge/confirm_screen.dart';
 import 'features/log_charge/save_screen.dart';
 import 'features/print_label/print_label_screen.dart';
 import 'features/settings/settings_screen.dart';
-
-// Screen imports — these files don't exist yet, so use placeholder widgets
-// They will be filled in by later tasks. Use a simple scaffold as placeholder.
-class _PlaceholderScreen extends StatelessWidget {
-  final String title;
-  const _PlaceholderScreen(this.title);
-  @override
-  Widget build(BuildContext context) => Scaffold(
-        appBar: AppBar(title: Text(title)),
-        body: Center(child: Text(title)),
-      );
-}
+import 'features/battery_list/qr_scan_screen.dart';
 
 final _router = GoRouter(
   routes: [
@@ -60,7 +49,7 @@ final _router = GoRouter(
     ),
     GoRoute(
       path: '/scan',
-      builder: (_, __) => const _PlaceholderScreen('QR SCAN'),
+      builder: (_, __) => const QrScanScreen(),
     ),
     GoRoute(
       path: '/settings',
