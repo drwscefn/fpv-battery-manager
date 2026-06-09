@@ -8,6 +8,8 @@ import 'features/battery_detail/battery_detail_screen.dart';
 import 'features/log_charge/capture_screen.dart';
 import 'features/log_charge/confirm_screen.dart';
 import 'features/log_charge/save_screen.dart';
+import 'features/print_label/print_label_screen.dart';
+import 'features/settings/settings_screen.dart';
 
 // Screen imports — these files don't exist yet, so use placeholder widgets
 // They will be filled in by later tasks. Use a simple scaffold as placeholder.
@@ -54,7 +56,7 @@ final _router = GoRouter(
     GoRoute(
       path: '/battery/:id/print',
       builder: (_, state) =>
-          _PlaceholderScreen('PRINT ${state.pathParameters['id']}'),
+          PrintLabelScreen(batteryId: state.pathParameters['id']!),
     ),
     GoRoute(
       path: '/scan',
@@ -62,7 +64,7 @@ final _router = GoRouter(
     ),
     GoRoute(
       path: '/settings',
-      builder: (_, __) => const _PlaceholderScreen('SETTINGS'),
+      builder: (_, __) => const SettingsScreen(),
     ),
   ],
 );
