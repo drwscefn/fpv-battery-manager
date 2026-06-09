@@ -1,6 +1,7 @@
 // lib/core/database/charge_logs_dao.dart
 import 'dart:convert';
 import 'package:drift/drift.dart';
+import '../models/log_type.dart';
 import 'database.dart';
 
 class ChargeLogsDao {
@@ -31,6 +32,7 @@ class ChargeLogsDao {
     required String batteryId,
     required List<double> cellVoltages,
     required List<int> cellIr,
+    LogType logType = LogType.postCharge,
     String? notes,
   }) =>
       _db.into(_db.chargeLogs).insert(ChargeLogsCompanion.insert(
@@ -39,6 +41,7 @@ class ChargeLogsDao {
             loggedAt: DateTime.now(),
             cellVoltages: jsonEncode(cellVoltages),
             cellIr: jsonEncode(cellIr),
+            logType: Value(logType.dbValue),
             notes: Value(notes),
           ));
 

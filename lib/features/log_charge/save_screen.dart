@@ -7,6 +7,7 @@ import '../../core/database/database_provider.dart';
 import '../../core/health/health_service.dart';
 import '../../core/health/thresholds.dart';
 import '../../core/models/health_flag.dart';
+import '../../core/models/log_type.dart';
 import '../../core/theme/app_theme.dart';
 import 'log_charge_provider.dart';
 
@@ -37,6 +38,7 @@ class _SaveScreenState extends ConsumerState<SaveScreen> {
           batteryId: widget.batteryId,
           cellVoltages: state.voltages,
           cellIr: state.irValues,
+          logType: state.logType,
           notes:
               _notes.text.trim().isEmpty ? null : _notes.text.trim(),
         );
@@ -103,6 +105,7 @@ class _SaveScreenState extends ConsumerState<SaveScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final logType = ref.watch(logChargeProvider(widget.batteryId)).logType;
     return Scaffold(
       appBar: AppBar(title: const Text('// ADD NOTE + SAVE //')),
       body: Padding(
@@ -110,6 +113,52 @@ class _SaveScreenState extends ConsumerState<SaveScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
+            Text(
+              'LOG TYPE',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: AppColors.textSecondary,
+                    letterSpacing: 3,
+                  ),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: LogType.values.map((t) {
+                final selected = logType == t;
+                return Expanded(
+                  child: Padding(
+                    padding: const EdgeInsets.only(right: 4),
+                    child: OutlinedButton(
+                      style: OutlinedButton.styleFrom(
+                        backgroundColor: selected
+                            ? AppColors.accent
+                            : Colors.transparent,
+                        foregroundColor: selected
+                            ? Colors.black
+                            : AppColors.textSecondary,
+                        side: BorderSide(
+                          color: selected
+                              ? AppColors.accent
+                              : AppColors.border,
+                        ),
+                        shape: const RoundedRectangleBorder(),
+                        padding:
+                            const EdgeInsets.symmetric(vertical: 8),
+                      ),
+                      onPressed: () => ref
+                          .read(
+                              logChargeProvider(widget.batteryId).notifier)
+                          .setLogType(t),
+                      child: Text(
+                        t.label,
+                        style: const TextStyle(
+                            fontSize: 10, letterSpacing: 1),
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+            const SizedBox(height: 16),
             TextField(
               controller: _notes,
               maxLines: 3,

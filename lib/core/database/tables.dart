@@ -20,6 +20,7 @@ class ChargeLogs extends Table {
   TextColumn get cellVoltages => text()();
   TextColumn get cellIr => text()();
   TextColumn get notes => text().nullable()();
+  TextColumn get logType => text().withDefault(const Constant('post_charge'))();
 
   @override
   Set<Column> get primaryKey => {id};

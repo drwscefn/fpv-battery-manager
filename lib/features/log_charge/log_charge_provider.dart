@@ -1,5 +1,6 @@
 // lib/features/log_charge/log_charge_provider.dart
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../core/models/log_type.dart';
 import '../../core/ocr/ocr_service.dart';
 
 class LogChargeState {
@@ -8,6 +9,7 @@ class LogChargeState {
   final List<int> irValues;
   final String notes;
   final bool processing;
+  final LogType logType;
 
   const LogChargeState({
     this.imagePath,
@@ -15,6 +17,7 @@ class LogChargeState {
     this.irValues = const [],
     this.notes = '',
     this.processing = false,
+    this.logType = LogType.postCharge,
   });
 
   LogChargeState copyWith({
@@ -23,6 +26,7 @@ class LogChargeState {
     List<int>? irValues,
     String? notes,
     bool? processing,
+    LogType? logType,
   }) =>
       LogChargeState(
         imagePath: imagePath ?? this.imagePath,
@@ -30,6 +34,7 @@ class LogChargeState {
         irValues: irValues ?? this.irValues,
         notes: notes ?? this.notes,
         processing: processing ?? this.processing,
+        logType: logType ?? this.logType,
       );
 }
 
@@ -62,6 +67,8 @@ class LogChargeNotifier extends FamilyNotifier<LogChargeState, String> {
   }
 
   void setNotes(String notes) => state = state.copyWith(notes: notes);
+
+  void setLogType(LogType t) => state = state.copyWith(logType: t);
 }
 
 final logChargeProvider =
