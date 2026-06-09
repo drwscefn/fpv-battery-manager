@@ -44,9 +44,17 @@ class _SaveScreenState extends ConsumerState<SaveScreen> {
         );
 
     final thresholds = await HealthThresholds.load();
+    final battery =
+        await ref.read(batteriesDaoProvider).getBatteryById(widget.batteryId);
+    final cycleCount = await ref
+        .read(chargeLogsDaoProvider)
+        .countLogsOfType(widget.batteryId, 'post_charge');
     final flags = HealthService.computeFlags(
       recentVoltages: [state.voltages],
       recentIr: [state.irValues],
+      recentLogTypes: [state.logType.dbValue],
+      totalChargeCycles: cycleCount,
+      isPuffed: battery?.isPuffed ?? false,
       thresholds: thresholds,
     );
     final redFlags =

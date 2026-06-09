@@ -21,6 +21,7 @@ class BatteriesDao {
     required int cellCount,
     required int capacityMah,
     String? notes,
+    bool isPuffed = false,
   }) =>
       _db.into(_db.batteries).insert(BatteriesCompanion.insert(
             id: id,
@@ -29,6 +30,7 @@ class BatteriesDao {
             capacityMah: capacityMah,
             notes: Value(notes),
             createdAt: DateTime.now(),
+            isPuffed: Value(isPuffed),
           ));
 
   Future<void> updateBattery({
@@ -41,6 +43,11 @@ class BatteriesDao {
           label: Value(label),
           notes: Value(notes),
         ),
+      );
+
+  Future<void> setPuffed(String id, {required bool value}) =>
+      (_db.update(_db.batteries)..where((t) => t.id.equals(id))).write(
+        BatteriesCompanion(isPuffed: Value(value)),
       );
 
   Future<void> deleteBattery(String id) =>
@@ -59,6 +66,7 @@ class BatteriesDao {
       cellCount: source.cellCount,
       capacityMah: source.capacityMah,
       notes: source.notes,
+      isPuffed: false,
     );
   }
 }

@@ -6,16 +6,73 @@ class HealthService {
   static List<HealthFlag> computeFlags({
     required List<List<double>> recentVoltages,
     required List<List<int>> recentIr,
+    required List<String> recentLogTypes,
+    required int totalChargeCycles,
+    required bool isPuffed,
     required HealthThresholds thresholds,
   }) {
     final flags = <HealthFlag>[];
 
+    // ── Puff — immediate retire ──────────────────────────────────────────────
+    if (isPuffed) {
+      flags.add(const HealthFlag(
+        type: HealthFlagType.puffed,
+        level: HealthFlagLevel.red,
+        message: 'PUFFED — RETIRE IMMEDIATELY',
+      ));
+    }
+
+    // ── Cycle count ──────────────────────────────────────────────────────────
+    if (totalChargeCycles > thresholds.maxCycleCount) {
+      flags.add(HealthFlag(
+        type: HealthFlagType.highCycleCount,
+        level: HealthFlagLevel.yellow,
+        message:
+            'CYCLE COUNT $totalChargeCycles > ${thresholds.maxCycleCount} — CONSIDER RETIRING',
+      ));
+    }
+
     if (recentVoltages.isEmpty) return flags;
 
+    // ── Overvoltage — check most recent post-charge log ──────────────────────
+    for (var i = 0; i < recentLogTypes.length; i++) {
+      if (recentLogTypes[i] == 'post_charge' && i < recentVoltages.length) {
+        final voltages = recentVoltages[i];
+        for (var c = 0; c < voltages.length; c++) {
+          if (voltages[c] > thresholds.maxChargeVoltage) {
+            flags.add(HealthFlag(
+              type: HealthFlagType.overvoltage,
+              level: HealthFlagLevel.red,
+              message:
+                  'C${c + 1} OVERVOLTAGE: ${voltages[c].toStringAsFixed(3)}V > ${thresholds.maxChargeVoltage}V',
+            ));
+          }
+        }
+        break;
+      }
+    }
+
+    // ── Deep discharge — check most recent post-flight log ───────────────────
+    for (var i = 0; i < recentLogTypes.length; i++) {
+      if (recentLogTypes[i] == 'post_flight' && i < recentVoltages.length) {
+        final voltages = recentVoltages[i];
+        for (var c = 0; c < voltages.length; c++) {
+          if (voltages[c] < thresholds.minFlightCellVoltage) {
+            flags.add(HealthFlag(
+              type: HealthFlagType.deepDischarge,
+              level: HealthFlagLevel.red,
+              message:
+                  'C${c + 1} DEEP DISCHARGE: ${voltages[c].toStringAsFixed(3)}V < ${thresholds.minFlightCellVoltage}V',
+            ));
+          }
+        }
+        break;
+      }
+    }
+
+    // ── Red flags from latest log ────────────────────────────────────────────
     final latestV = recentVoltages.last;
     final latestIr = recentIr.isNotEmpty ? recentIr.last : <int>[];
-
-    // --- Red flags from latest log ---
 
     if (latestV.isNotEmpty) {
       final delta = latestV.reduce((a, b) => a > b ? a : b) -
@@ -29,13 +86,12 @@ class HealthService {
         ));
       }
 
-      for (final v in latestV) {
-        if (v < thresholds.minCellVoltage) {
+      for (var i = 0; i < latestV.length; i++) {
+        if (latestV[i] < thresholds.minCellVoltage) {
           flags.add(HealthFlag(
             type: HealthFlagType.lowCellVoltage,
             level: HealthFlagLevel.red,
-            message:
-                'CELL ${latestV.indexOf(v) + 1} LOW: ${v.toStringAsFixed(3)}V',
+            message: 'C${i + 1} LOW: ${latestV[i].toStringAsFixed(3)}V',
           ));
           break;
         }
@@ -43,13 +99,13 @@ class HealthService {
     }
 
     if (latestIr.isNotEmpty) {
-      for (final ir in latestIr) {
-        if (ir > thresholds.maxIrAbsolute) {
+      for (var i = 0; i < latestIr.length; i++) {
+        if (latestIr[i] > thresholds.maxIrAbsolute) {
           flags.add(HealthFlag(
             type: HealthFlagType.highIrAbsolute,
             level: HealthFlagLevel.red,
             message:
-                'CELL ${latestIr.indexOf(ir) + 1} HIGH IR: ${ir}mΩ > ${thresholds.maxIrAbsolute}mΩ',
+                'C${i + 1} HIGH IR: ${latestIr[i]}mΩ > ${thresholds.maxIrAbsolute}mΩ',
           ));
           break;
         }
@@ -64,7 +120,7 @@ class HealthService {
               type: HealthFlagType.irDelta,
               level: HealthFlagLevel.red,
               message:
-                  'CELL ${i + 1} IR DELTA: ${latestIr[i]}mΩ (avg: ${avg.toStringAsFixed(1)}mΩ)',
+                  'C${i + 1} IR DELTA: ${latestIr[i]}mΩ (avg: ${avg.toStringAsFixed(1)}mΩ)',
             ));
             break;
           }
@@ -72,8 +128,7 @@ class HealthService {
       }
     }
 
-    // --- Yellow trend flags (need >= 3 logs) ---
-
+    // ── Yellow trend flags (need >= 3 logs) ──────────────────────────────────
     if (recentVoltages.length >= 3) {
       final deltas = recentVoltages.map((v) {
         if (v.isEmpty) return 0.0;
@@ -84,7 +139,7 @@ class HealthService {
         flags.add(const HealthFlag(
           type: HealthFlagType.cellDeltaTrend,
           level: HealthFlagLevel.yellow,
-          message: 'CELL DELTA RISING OVER LAST LOGS',
+          message: 'CELL IMBALANCE WORSENING OVER RECENT LOGS',
         ));
       }
     }
@@ -98,7 +153,7 @@ class HealthService {
         flags.add(const HealthFlag(
           type: HealthFlagType.irTrend,
           level: HealthFlagLevel.yellow,
-          message: 'AVG IR RISING OVER LAST LOGS',
+          message: 'AVG IR RISING OVER RECENT LOGS',
         ));
       }
     }

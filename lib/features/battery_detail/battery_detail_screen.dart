@@ -185,26 +185,45 @@ class _BatteryDetailScreenState extends ConsumerState<BatteryDetailScreen> {
             icon: const Icon(Icons.more_vert),
             color: AppColors.surface,
             shape: const RoundedRectangleBorder(),
-            onSelected: (v) {
+            onSelected: (v) async {
               if (v == 'rename') _showEditDialog(context);
               if (v == 'duplicate') _showDuplicateDialog(context);
               if (v == 'delete') _showDeleteDialog(context);
+              if (v == 'puff') {
+                final b = await ref
+                    .read(batteriesDaoProvider)
+                    .getBatteryById(widget.batteryId);
+                if (b == null) return;
+                await ref
+                    .read(batteriesDaoProvider)
+                    .setPuffed(widget.batteryId, value: !b.isPuffed);
+              }
             },
-            itemBuilder: (_) => const [
-              PopupMenuItem(
-                value: 'rename',
-                child: Text('RENAME'),
-              ),
-              PopupMenuItem(
-                value: 'duplicate',
-                child: Text('DUPLICATE'),
-              ),
-              PopupMenuItem(
-                value: 'delete',
-                child: Text('DELETE',
-                    style: TextStyle(color: AppColors.warning)),
-              ),
-            ],
+            itemBuilder: (_) {
+              final b = ref
+                  .read(batteryDetailProvider(widget.batteryId))
+                  .valueOrNull;
+              final puffed = b?.isPuffed ?? false;
+              return [
+                const PopupMenuItem(value: 'rename', child: Text('RENAME')),
+                const PopupMenuItem(
+                    value: 'duplicate', child: Text('DUPLICATE')),
+                PopupMenuItem(
+                  value: 'puff',
+                  child: Text(
+                    puffed ? 'CLEAR PUFF FLAG' : 'MARK AS PUFFED',
+                    style: TextStyle(
+                      color: puffed ? AppColors.accent : AppColors.warning,
+                    ),
+                  ),
+                ),
+                const PopupMenuItem(
+                  value: 'delete',
+                  child: Text('DELETE',
+                      style: TextStyle(color: AppColors.warning)),
+                ),
+              ];
+            },
           ),
         ],
       ),

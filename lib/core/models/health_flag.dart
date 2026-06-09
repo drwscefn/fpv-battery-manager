@@ -8,6 +8,10 @@ enum HealthFlagType {
   irDelta,
   cellDeltaTrend,
   irTrend,
+  overvoltage,
+  deepDischarge,
+  highCycleCount,
+  puffed,
 }
 
 class HealthFlag {

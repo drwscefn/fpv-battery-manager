@@ -8,6 +8,7 @@ class Batteries extends Table {
   IntColumn get capacityMah => integer()();
   TextColumn get notes => text().nullable()();
   DateTimeColumn get createdAt => dateTime()();
+  BoolColumn get isPuffed => boolean().withDefault(const Constant(false))();
 
   @override
   Set<Column> get primaryKey => {id};

@@ -22,17 +22,27 @@ final batteryLogsProvider =
 final batteryHealthProvider =
     FutureProvider.family<List<HealthFlag>, String>((ref, id) async {
   final logs =
-      await ref.read(chargeLogsDaoProvider).getRecentLogs(id, limit: 5);
+      await ref.read(chargeLogsDaoProvider).getRecentLogs(id, limit: 10);
+  final battery = await ref.read(batteriesDaoProvider).getBatteryById(id);
+  final cycleCount = await ref
+      .read(chargeLogsDaoProvider)
+      .countLogsOfType(id, 'post_charge');
   final thresholds = await HealthThresholds.load();
+
   final voltages = logs
       .map((l) => (jsonDecode(l.cellVoltages) as List).cast<double>())
       .toList();
   final irValues = logs
       .map((l) => (jsonDecode(l.cellIr) as List).cast<int>())
       .toList();
+  final logTypes = logs.map((l) => l.logType).toList();
+
   return HealthService.computeFlags(
     recentVoltages: voltages,
     recentIr: irValues,
+    recentLogTypes: logTypes,
+    totalChargeCycles: cycleCount,
+    isPuffed: battery?.isPuffed ?? false,
     thresholds: thresholds,
   );
 });
