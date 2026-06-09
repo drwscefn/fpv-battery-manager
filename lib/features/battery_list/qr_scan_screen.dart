@@ -1,7 +1,5 @@
 // lib/features/battery_list/qr_scan_screen.dart
-import 'dart:async';
 import 'package:camera/camera.dart';
-import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -19,7 +17,7 @@ class QrScanScreen extends ConsumerStatefulWidget {
 class _QrScanScreenState extends ConsumerState<QrScanScreen> {
   CameraController? _controller;
   final _scanner = BarcodeScanner(formats: [BarcodeFormat.qrCode]);
-  bool _processing = false;
+  bool _scanning = false;
 
   @override
   void initState() {
@@ -30,77 +28,66 @@ class _QrScanScreenState extends ConsumerState<QrScanScreen> {
   Future<void> _initCamera() async {
     final cameras = await availableCameras();
     if (cameras.isEmpty) return;
-    _controller = CameraController(cameras.first, ResolutionPreset.high,
-        enableAudio: false);
+    _controller = CameraController(
+      cameras.first,
+      ResolutionPreset.high,
+      enableAudio: false,
+    );
     await _controller!.initialize();
-    if (!mounted) return;
-    setState(() {});
-    _controller!.startImageStream(_processFrame);
+    if (mounted) setState(() {});
   }
 
-  Future<void> _processFrame(CameraImage image) async {
-    if (_processing) return;
-    _processing = true;
+  @override
+  void dispose() {
+    _controller?.dispose();
+    _scanner.close();
+    super.dispose();
+  }
+
+  Future<void> _scan() async {
+    if (_scanning || _controller == null) return;
+    setState(() => _scanning = true);
     try {
-      final inputImage = _toInputImage(image);
-      if (inputImage == null) return;
+      final file = await _controller!.takePicture();
+      final inputImage = InputImage.fromFilePath(file.path);
       final barcodes = await _scanner.processImage(inputImage);
-      if (barcodes.isEmpty) return;
-      final value = barcodes.first.rawValue;
-      if (value == null || value.isEmpty) return;
 
-      await _controller?.stopImageStream();
+      if (!mounted) return;
 
-      final battery =
-          await ref.read(batteriesDaoProvider).getBatteryById(value);
+      if (barcodes.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('NO QR CODE DETECTED — TRY AGAIN')),
+        );
+        return;
+      }
+
+      final value = barcodes.first.rawValue ?? '';
+      if (value.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('EMPTY QR CODE')),
+        );
+        return;
+      }
+
+      final battery = await ref.read(batteriesDaoProvider).getBatteryById(value);
       if (!mounted) return;
 
       if (battery != null) {
         context.pushReplacement('/battery/${battery.id}/log/capture');
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('BATTERY NOT FOUND')),
+          const SnackBar(content: Text('BATTERY NOT FOUND IN DATABASE')),
         );
-        await _controller?.startImageStream(_processFrame);
-        _processing = false;
       }
-    } catch (_) {
-      _processing = false;
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('SCAN ERROR: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _scanning = false);
     }
-  }
-
-  InputImage? _toInputImage(CameraImage image) {
-    final camera = _controller?.description;
-    if (camera == null) return null;
-
-    final rotation =
-        InputImageRotationValue.fromRawValue(camera.sensorOrientation) ??
-            InputImageRotation.rotation0deg;
-
-    // Concatenate all plane bytes (required for correct YUV data)
-    final WriteBuffer allBytes = WriteBuffer();
-    for (final plane in image.planes) {
-      allBytes.putUint8List(plane.bytes);
-    }
-    final bytes = allBytes.done().buffer.asUint8List();
-
-    return InputImage.fromBytes(
-      bytes: bytes,
-      metadata: InputImageMetadata(
-        size: Size(image.width.toDouble(), image.height.toDouble()),
-        rotation: rotation,
-        format: InputImageFormat.nv21, // Android camera native format
-        bytesPerRow: image.planes[0].bytesPerRow,
-      ),
-    );
-  }
-
-  @override
-  void dispose() {
-    _controller?.stopImageStream();
-    _controller?.dispose();
-    _scanner.close();
-    super.dispose();
   }
 
   @override
@@ -120,6 +107,7 @@ class _QrScanScreenState extends ConsumerState<QrScanScreen> {
       body: Stack(
         children: [
           CameraPreview(_controller!),
+          // QR alignment box
           Center(
             child: Container(
               width: 240,
@@ -129,17 +117,45 @@ class _QrScanScreenState extends ConsumerState<QrScanScreen> {
               ),
             ),
           ),
-          const Align(
+          // Capture button
+          Align(
             alignment: Alignment.bottomCenter,
             child: Padding(
-              padding: EdgeInsets.only(bottom: 32),
-              child: Text(
-                'ALIGN QR CODE TO FRAME',
-                style: TextStyle(
-                  color: AppColors.accent,
-                  letterSpacing: 3,
-                  fontSize: 12,
-                ),
+              padding: const EdgeInsets.only(bottom: 40),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text(
+                    'ALIGN QR CODE TO FRAME',
+                    style: TextStyle(
+                      color: AppColors.accent,
+                      letterSpacing: 3,
+                      fontSize: 12,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  GestureDetector(
+                    onTap: _scan,
+                    child: Container(
+                      width: 64,
+                      height: 64,
+                      decoration: BoxDecoration(
+                        border: Border.all(color: AppColors.accent, width: 3),
+                        shape: BoxShape.circle,
+                      ),
+                      child: _scanning
+                          ? const Padding(
+                              padding: EdgeInsets.all(16),
+                              child: CircularProgressIndicator(
+                                color: AppColors.accent,
+                                strokeWidth: 2,
+                              ),
+                            )
+                          : const Icon(Icons.qr_code_scanner,
+                              color: AppColors.accent, size: 32),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
