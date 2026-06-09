@@ -167,7 +167,7 @@ class _PrintButtonState extends ConsumerState<_PrintButton> {
     });
     try {
       await _niimbot.connect();
-      await _niimbot.printLabel(widget.batteryLabel.toUpperCase());
+      await _niimbot.printLabel(widget.batteryId);
       await _niimbot.disconnect();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(

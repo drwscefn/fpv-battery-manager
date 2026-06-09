@@ -1,8 +1,9 @@
 // lib/core/printing/niimbot_service.dart
 import 'dart:async';
 import 'dart:typed_data';
+import 'dart:ui' as ui;
 import 'package:flutter_blue_plus/flutter_blue_plus.dart';
-import 'package:qr/qr.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 
 class NiimbotService {
   BluetoothDevice? _device;
@@ -165,7 +166,7 @@ class NiimbotService {
     const labelWidthPx = 96;
     const labelHeightPx = 96;
 
-    final bitmap = _renderQrBitmap(text, labelWidthPx, labelHeightPx);
+    final bitmap = await _renderQrBitmap(text, labelWidthPx, labelHeightPx);
     final bytesPerRow = (labelWidthPx / 8).ceil(); // = 12
 
     // Wake printer and read device type
@@ -224,45 +225,62 @@ class NiimbotService {
 
   // ── Bitmap rendering ─────────────────────────────────────────────────────────
 
-  /// Renders [text] as a QR code into a 1-bit packed bitmap (MSB first).
+  /// Renders [data] as a QR code into a 1-bit packed bitmap (MSB first).
+  /// Uses QrPainter (same renderer as on-screen QrImageView) for reliability.
   /// Returns bytes of length [height] * ceil([width] / 8).
-  static Uint8List _renderQrBitmap(String text, int width, int height) {
-    final qr = QrCode.fromData(
-      data: text,
-      errorCorrectLevel: QrErrorCorrectLevel.M,
+  static Future<Uint8List> _renderQrBitmap(
+      String data, int width, int height) async {
+    final recorder = ui.PictureRecorder();
+    final canvas = ui.Canvas(recorder);
+
+    // Solid white background
+    canvas.drawRect(
+      ui.Rect.fromLTWH(0, 0, width.toDouble(), height.toDouble()),
+      ui.Paint()..color = const ui.Color(0xFFFFFFFF),
     );
-    final img = QrImage(qr);
-    final moduleCount = qr.moduleCount;
 
-    // Add quiet zone: use 90% of the label for the QR, centred
-    const margin = 0.05; // 5% margin each side
-    final qrSize = (width * (1 - 2 * margin)).floor();
-    final offsetX = ((width - qrSize) / 2).floor();
-    final offsetY = ((height - qrSize) / 2).floor();
+    // Black QR modules, 5% margin each side
+    final padding = width * 0.05;
+    final qrPainter = QrPainter(
+      data: data,
+      version: QrVersions.auto,
+      errorCorrectionLevel: QrErrorCorrectLevel.M,
+      gapless: true,
+      eyeStyle: const QrEyeStyle(
+        eyeShape: QrEyeShape.square,
+        color: ui.Color(0xFF000000),
+      ),
+      dataModuleStyle: const QrDataModuleStyle(
+        dataModuleShape: QrDataModuleShape.square,
+        color: ui.Color(0xFF000000),
+      ),
+    );
+    canvas.save();
+    canvas.translate(padding, padding);
+    qrPainter.paint(
+        canvas, ui.Size(width - 2 * padding, height - 2 * padding));
+    canvas.restore();
 
+    final picture = recorder.endRecording();
+    final image = await picture.toImage(width, height);
+    final byteData =
+        await image.toByteData(format: ui.ImageByteFormat.rawRgba);
+    if (byteData == null) throw Exception('QR bitmap capture failed');
+
+    final rgba = byteData.buffer.asUint8List();
     final bytesPerRow = (width / 8).ceil();
-    final bytes = Uint8List(height * bytesPerRow);
+    final bitmap = Uint8List(height * bytesPerRow);
 
     for (int py = 0; py < height; py++) {
       for (int px = 0; px < width; px++) {
-        // Map pixel to QR module
-        final qx = px - offsetX;
-        final qy = py - offsetY;
-        bool dark = false;
-        if (qx >= 0 && qy >= 0 && qx < qrSize && qy < qrSize) {
-          final col = (qx * moduleCount / qrSize).floor();
-          final row = (qy * moduleCount / qrSize).floor();
-          if (col < moduleCount && row < moduleCount) {
-            dark = img.isDark(row, col);
-          }
-        }
-        if (dark) {
+        final i = (py * width + px) * 4; // RGBA stride
+        // Dark pixel (sum < 384 covers pure black; threshold generous for anti-alias)
+        if (rgba[i] + rgba[i + 1] + rgba[i + 2] < 384) {
           final byteIndex = py * bytesPerRow + (px ~/ 8);
-          final bitIndex = 7 - (px % 8);
-          bytes[byteIndex] |= (1 << bitIndex);
+          bitmap[byteIndex] |= (1 << (7 - (px % 8))); // MSB first
         }
       }
     }
-    return bytes;
+    return bitmap;
   }
 }
