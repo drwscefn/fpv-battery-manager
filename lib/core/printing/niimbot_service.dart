@@ -27,16 +27,17 @@ class NiimbotService {
 
   // ── Commands ─────────────────────────────────────────────────────────────────
 
-  static const _cmdGetInfo       = 0x40;
-  static const _cmdSetDensity    = 0x21;
-  static const _cmdSetLabelType  = 0x23;
-  static const _cmdStartPrint    = 0x01;
-  static const _cmdEndPrint      = 0xF3;
-  static const _cmdStartPage     = 0x03;
-  static const _cmdEndPage       = 0xE3;
-  static const _cmdSetDimension  = 0x13;
-  static const _cmdSetQuantity   = 0x15;
-  static const _cmdPrintRow      = 0x85;
+  static const _cmdGetInfo          = 0x40;
+  static const _cmdSetDensity       = 0x21;
+  static const _cmdAllowPrintClear  = 0x20;
+  static const _cmdSetLabelType     = 0x23;
+  static const _cmdStartPrint       = 0x01;
+  static const _cmdEndPrint         = 0xF3;
+  static const _cmdStartPage        = 0x03;
+  static const _cmdEndPage          = 0xE3;
+  static const _cmdSetDimension     = 0x13;
+  static const _cmdSetQuantity      = 0x15;
+  static const _cmdPrintRow         = 0x85;
 
   // ── Connection ───────────────────────────────────────────────────────────────
 
@@ -132,48 +133,70 @@ class NiimbotService {
 
   // ── Print flow ───────────────────────────────────────────────────────────────
 
-  /// Prints a QR code label for [text] on a 25×25mm label.
-  /// Label pixel dimensions for Niimbot D11/B21 at 203 DPI:
-  ///   25mm × 203 DPI / 25.4 ≈ 200 px wide, 200 px tall
+  /// Prints a QR code label for [text].
+  /// 96×96px — compatible with D11 (12mm) and larger models.
   Future<void> printLabel(String text) async {
     if (_writeChar == null) throw Exception('Not connected — call connect() first');
 
-    const labelWidthPx = 200;
-    const labelHeightPx = 200;
+    // 96px wide × 96px tall — compatible with D11 (12mm) and larger models
+    const labelWidthPx = 96;
+    const labelHeightPx = 96;
 
     final bitmap = _renderQrBitmap(text, labelWidthPx, labelHeightPx);
+    final bytesPerRow = (labelWidthPx / 8).ceil(); // = 12
 
-    // Wake / get info
-    await _send(_cmdGetInfo, [0x00]);
-    await Future.delayed(const Duration(milliseconds: 100));
+    // Wake printer and read device type
+    await _send(_cmdGetInfo, [0x01]);
+    await Future.delayed(const Duration(milliseconds: 200));
 
     // Configure label
-    await _send(_cmdSetDensity, [0x03]);           // density 3/5
-    await _send(_cmdSetLabelType, [0x01]);         // gap label
+    await _send(_cmdSetLabelType, [0x01]);  // gap-sensing labels
+    await Future.delayed(const Duration(milliseconds: 100));
+    await _send(_cmdSetDensity, [0x03]);    // density 3 of 5
+    await Future.delayed(const Duration(milliseconds: 100));
+
+    // Start print job
     await _send(_cmdStartPrint, [0x01]);
-    await _send(_cmdStartPage, [0x00]);
+    await Future.delayed(const Duration(milliseconds: 100));
+
+    // *** CRITICAL: must send ALLOW_PRINT_CLEAR before START_PAGE ***
+    await _send(_cmdAllowPrintClear, [0x01]);
+    await Future.delayed(const Duration(milliseconds: 100));
+
+    // Start page — empty payload
+    await _send(_cmdStartPage, []);
+    await Future.delayed(const Duration(milliseconds: 100));
+
+    // Dimensions: height (2 bytes big-endian), width (2 bytes big-endian)
     await _send(_cmdSetDimension, [
-      (labelHeightPx >> 8) & 0xFF,
-      labelHeightPx & 0xFF,
-      (labelWidthPx >> 8) & 0xFF,
-      labelWidthPx & 0xFF,
+      (labelHeightPx >> 8) & 0xFF, labelHeightPx & 0xFF,
+      (labelWidthPx >> 8) & 0xFF,  labelWidthPx & 0xFF,
     ]);
-    await _send(_cmdSetQuantity, [0x00, 0x01]);    // 1 copy
+    await Future.delayed(const Duration(milliseconds: 100));
+
+    // 1 copy
+    await _send(_cmdSetQuantity, [0x00, 0x01]);
+    await Future.delayed(const Duration(milliseconds: 100));
 
     // Send bitmap rows
-    final bytesPerRow = (labelWidthPx / 8).ceil();
     for (int row = 0; row < labelHeightPx; row++) {
       final rowData = bitmap.sublist(row * bytesPerRow, (row + 1) * bytesPerRow);
-      await _send(_cmdPrintRow, [
-        (row >> 8) & 0xFF,
-        row & 0xFF,
-        0x00,
-        ...rowData,
-      ], withoutResponse: true);
+      await _send(
+        _cmdPrintRow,
+        [(row >> 8) & 0xFF, row & 0xFF, 0x00, ...rowData],
+        withoutResponse: true,
+      );
+      // Yield every 16 rows to avoid flooding the BLE buffer
+      if (row % 16 == 15) await Future.delayed(const Duration(milliseconds: 20));
     }
+    await Future.delayed(const Duration(milliseconds: 200));
 
-    await _send(_cmdEndPage, [0x00]);
-    await _send(_cmdEndPrint, [0x00]);
+    // End page — empty payload
+    await _send(_cmdEndPage, []);
+    await Future.delayed(const Duration(milliseconds: 200));
+
+    // End print — empty payload
+    await _send(_cmdEndPrint, []);
   }
 
   // ── Bitmap rendering ─────────────────────────────────────────────────────────
